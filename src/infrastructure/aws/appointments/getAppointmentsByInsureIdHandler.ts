@@ -1,5 +1,5 @@
 import { APIGatewayProxyHandler } from "aws-lambda";
-import { AppointmentRepository } from "../../../infrastructure/repositories/appointmentRepository";
+import { AppointmentRepository } from "../../repositories/appointmentRepository";
 
 const appointmentRepository = new AppointmentRepository();
 

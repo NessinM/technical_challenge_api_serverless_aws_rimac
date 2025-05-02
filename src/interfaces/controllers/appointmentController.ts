@@ -1,4 +1,3 @@
-// src/interfaces/controllers/appointmentController.ts
 import { APIGatewayEvent, APIGatewayProxyResult } from 'aws-lambda';
 import { AppointmentFactory } from '../../domain/entities/appointmentFactory';
 import { AppointmentRepository } from '../../infrastructure/repositories/appointmentRepository';
@@ -9,7 +8,7 @@ const sns = new SNS();
 const appointmentRepository = new AppointmentRepository();
 
 // Lambda handler para registrar una cita
-export const createAppointmentHandler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
+export const createHandler = async (event: APIGatewayEvent): Promise<APIGatewayProxyResult> => {
   try {
     // Parsear el cuerpo de la solicitud
     const { insuredId, countryISO, scheduleId } = JSON.parse(event.body || '{}');

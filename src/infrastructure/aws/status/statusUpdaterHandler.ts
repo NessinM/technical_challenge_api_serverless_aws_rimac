@@ -1,7 +1,7 @@
-import { SQSEvent } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { SQSEvent } from "aws-lambda";
+import { AppointmentRepository } from "../../repositories/appointmentRepository";
 
-const dynamo = new DynamoDB.DocumentClient();
+const appointmentRepository = new AppointmentRepository();
 
 export const updateStatus = async (event: SQSEvent) => {
   for (const record of event.Records) {
@@ -10,22 +10,10 @@ export const updateStatus = async (event: SQSEvent) => {
     const detail = body.detail;
     const { scheduleId, insuredId } = detail;
 
-    // Actualizar estado en DynamoDB
-    await dynamo.update({
-      TableName: process.env.APPOINTMENTS_TABLE!,
-      Key: {
-        insuredId,
-        scheduleId,
-      },
-      UpdateExpression: 'SET #status = :completed',
-      ExpressionAttributeNames: {
-        '#status': 'status',
-      },
-      ExpressionAttributeValues: {
-        ':completed': 'completed',
-      },
-    }).promise();
+    await appointmentRepository.updateStatus(insuredId, scheduleId);
   }
 
-  return { statusCode: 200 };
+  return {
+    statusCode: 200,
+  };
 };

@@ -54,7 +54,7 @@ provider:
 
 functions:
   createAppointment:
-    handler: src/interfaces/controllers/appointmentController.createAppointmentHandler
+    handler: src/interfaces/controllers/appointmentController.createHandler
     events:
       - http:
           path: appointments
@@ -70,15 +70,7 @@ functions:
       - AppointmentTopic
 
   getAppointments:
-    handler: src/infrastructure/aws/appointments/getAppointmentsHandler.get
-    events:
-      - http:
-          path: appointments
-          method: get
-          cors: true
-
-  getAppointment:
-    handler: src/infrastructure/aws/appointments/getAppointmentByInsureIdHandler.get
+    handler: src/infrastructure/aws/appointments/getAppointmentsByInsureIdHandler.get
     events:
       - http:
           path: appointments/{insuredId}
