@@ -68,7 +68,15 @@ functions:
       DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
 
   getAppointments:
-    handler: src/infrastructure/aws/appointments/getAppointmentsHandler.getAppointments
+    handler: src/infrastructure/aws/appointments/getAppointmentsHandler.get
+    events:
+      - http:
+          path: appointments
+          method: get
+          cors: true
+
+  getAppointment:
+    handler: src/infrastructure/aws/appointments/getAppointmentByInsureIdHandler.get
     events:
       - http:
           path: appointments/{insuredId}
@@ -245,3 +253,11 @@ resources:
         ProvisionedThroughput:
           ReadCapacityUnits: 5
           WriteCapacityUnits: 5
+package:
+  individually: true
+  patterns:
+    - "!node_modules/**"
+    - "!tests/**"
+    - "!docs/**"
+    - "!*.md"
+    - "!*.log"

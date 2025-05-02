@@ -44,7 +44,7 @@ export const createAppointmentHandler = async (event: APIGatewayEvent): Promise<
       statusCode: 201,
       body: JSON.stringify({
         message: 'Appointment created successfully',
-        appointment,
+        // appointment,
       }),
     };
   } catch (error) {

@@ -5,7 +5,7 @@ import { SNS } from "aws-sdk";
 const prisma = new PrismaClient();
 const sns = new SNS();
 
-export const processAppointmentPe = async (event: SQSEvent) => {
+export const processAppointmentCl = async (event: SQSEvent) => {
   for (const record of event.Records) {
     const message = JSON.parse(record.body);
 

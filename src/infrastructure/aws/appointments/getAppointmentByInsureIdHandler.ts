@@ -4,9 +4,22 @@ import { DynamoDB } from 'aws-sdk';
 const dynamo = new DynamoDB.DocumentClient();
 
 export const get: APIGatewayProxyHandler = async (event) => {
+  const { insuredId } = event.pathParameters ?? {};
+
+  if (!insuredId) {
+    return {
+      statusCode: 400,
+      body: JSON.stringify({ error: 'Missing insuredId' }),
+    };
+  }
+
   try {
     const result = await dynamo.query({
-      TableName: process.env.APPOINTMENTS_TABLE!
+      TableName: process.env.APPOINTMENTS_TABLE!,
+      KeyConditionExpression: 'insuredId = :id',
+      ExpressionAttributeValues: {
+        ':id': insuredId,
+      },
     }).promise();
 
     return {
