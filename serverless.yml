@@ -66,6 +66,8 @@ functions:
           - AppointmentTopic
           - TopicArn
       DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
+    dependsOn:
+      - AppointmentTopic
 
   getAppointments:
     handler: src/infrastructure/aws/appointments/getAppointmentsHandler.get
@@ -132,29 +134,78 @@ functions:
               - AppointmentStatusUpdateQueue
               - Arn
           batchSize: 5
+    dependsOn:
+      - AppointmentStatusUpdateQueue
 
 resources:
   Resources:
+    # Dead Letter Queues
+    SqsPeDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_PE_DLQ
+
+    SqsClDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_CL_DLQ
+
+    AppointmentStatusDLQ:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: AppointmentStatusUpdate_DLQ
+
+    # Main Queues
     SqsPeQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_PE
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt SqsPeDLQ.Arn
+          maxReceiveCount: 5
 
     SqsClQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_CL
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt SqsClDLQ.Arn
+          maxReceiveCount: 5
 
     AppointmentStatusUpdateQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: AppointmentStatusUpdateQueue
+        RedrivePolicy:
+          deadLetterTargetArn: !GetAtt AppointmentStatusDLQ.Arn
+          maxReceiveCount: 5
 
+    # SNS Topic
     AppointmentTopic:
       Type: AWS::SNS::Topic
       Properties:
         TopicName: AppointmentTopic
 
+    # SNS Subscriptions
+    AppointmentTopicSubscriptionPE:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: sqs
+        Endpoint: !GetAtt SqsPeQueue.Arn
+        TopicArn: !Ref AppointmentTopic
+        FilterPolicy:
+          countryISO: ["PE"]
+
+    AppointmentTopicSubscriptionCL:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: sqs
+        Endpoint: !GetAtt SqsClQueue.Arn
+        TopicArn: !Ref AppointmentTopic
+        FilterPolicy:
+          countryISO: ["CL"]
+
+    # Queue Policies
     PermissionToSendToSQS:
       Type: AWS::SQS::QueuePolicy
       Properties:
@@ -178,13 +229,12 @@ resources:
           Version: "2012-10-17"
           Statement:
             - Effect: Allow
-              Principal:
-                AWS: "*"
+              Principal: "*"
               Action:
-                - "sqs:SendMessage"
-                - "sqs:ReceiveMessage"
-                - "sqs:DeleteMessage"
-                - "sqs:GetQueueAttributes"
+                - sqs:SendMessage
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
               Resource: !GetAtt SqsPeQueue.Arn
 
     SqsClQueuePolicy:
@@ -196,15 +246,15 @@ resources:
           Version: "2012-10-17"
           Statement:
             - Effect: Allow
-              Principal:
-                AWS: "*"
+              Principal: "*"
               Action:
-                - "sqs:SendMessage"
-                - "sqs:ReceiveMessage"
-                - "sqs:DeleteMessage"
-                - "sqs:GetQueueAttributes"
+                - sqs:SendMessage
+                - sqs:ReceiveMessage
+                - sqs:DeleteMessage
+                - sqs:GetQueueAttributes
               Resource: !GetAtt SqsClQueue.Arn
 
+    # EventBridge Rule
     AppointmentCompletedRule:
       Type: AWS::Events::Rule
       Properties:
@@ -218,24 +268,7 @@ resources:
           - Arn: !GetAtt AppointmentStatusUpdateQueue.Arn
             Id: "SendToStatusQueue"
 
-    AppointmentTopicSubscriptionPE:
-      Type: AWS::SNS::Subscription
-      Properties:
-        Protocol: sqs
-        Endpoint: !GetAtt SqsPeQueue.Arn
-        TopicArn: !Ref AppointmentTopic
-        FilterPolicy:
-          countryISO: ["PE"]
-
-    AppointmentTopicSubscriptionCL:
-      Type: AWS::SNS::Subscription
-      Properties:
-        Protocol: sqs
-        Endpoint: !GetAtt SqsClQueue.Arn
-        TopicArn: !Ref AppointmentTopic
-        FilterPolicy:
-          countryISO: ["CL"]
-
+    # DynamoDB Table
     AppointmentsTable:
       Type: AWS::DynamoDB::Table
       Properties:
@@ -250,9 +283,15 @@ resources:
             KeyType: HASH
           - AttributeName: scheduleId
             KeyType: RANGE
-        ProvisionedThroughput:
-          ReadCapacityUnits: 5
-          WriteCapacityUnits: 5
+        BillingMode: PAY_PER_REQUEST
+
+    # Logs (opcional, si quieres controlar retención)
+    LogGroupCreateAppointment:
+      Type: AWS::Logs::LogGroup
+      Properties:
+        LogGroupName: /aws/lambda/${self:service}-createAppointment
+        RetentionInDays: 14
+
 package:
   individually: true
   patterns:

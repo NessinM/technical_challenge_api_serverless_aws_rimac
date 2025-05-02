@@ -1,4 +1,3 @@
-// src/infrastructure/repositories/appointmentRepository.ts
 import { Appointment } from "../../domain/entities/appointment";
 import { DynamoDB } from "aws-sdk";
 
@@ -6,7 +5,6 @@ const dynamoDb = new DynamoDB.DocumentClient();
 const TABLE_NAME = process.env.APPOINTMENTS_TABLE || "AppointmentsTable";
 
 export class AppointmentRepository {
-  // Guardar la cita en DynamoDB
   async save(appointment: Appointment): Promise<void> {
     const params = {
       TableName: TABLE_NAME,
@@ -22,7 +20,6 @@ export class AppointmentRepository {
     await dynamoDb.put(params).promise();
   }
 
-  // Obtener citas por asegurado
   async getByInsuredId(insuredId: string): Promise<Appointment[]> {
     const params = {
       TableName: TABLE_NAME,
@@ -33,6 +30,15 @@ export class AppointmentRepository {
     };
 
     const result = await dynamoDb.query(params).promise();
+    return result.Items as Appointment[];
+  }
+
+  async get(): Promise<Appointment[]> {
+    const params = {
+      TableName: TABLE_NAME,
+    };
+
+    const result = await dynamoDb.scan(params).promise();
     return result.Items as Appointment[];
   }
 }

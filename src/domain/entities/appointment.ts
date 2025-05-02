@@ -11,9 +11,4 @@ export class Appointment {
     public status: string = 'pending',  // Estado de la cita
     public timestamp: string = new Date().toISOString()  // Fecha de creación
   ) {}
-
-  // Método para cambiar el estado de la cita
-  public changeStatus(newStatus: string) {
-    this.status = newStatus;
-  }
 }

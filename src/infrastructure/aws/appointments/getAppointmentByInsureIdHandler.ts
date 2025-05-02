@@ -1,36 +1,30 @@
-import { APIGatewayProxyHandler } from 'aws-lambda';
-import { DynamoDB } from 'aws-sdk';
+import { APIGatewayProxyHandler } from "aws-lambda";
+import { AppointmentRepository } from "../../../infrastructure/repositories/appointmentRepository";
 
-const dynamo = new DynamoDB.DocumentClient();
+const appointmentRepository = new AppointmentRepository();
 
 export const get: APIGatewayProxyHandler = async (event) => {
-  const { insuredId } = event.pathParameters ?? {};
+  const { insuredId = "" } = event.pathParameters ?? {};
 
   if (!insuredId) {
     return {
       statusCode: 400,
-      body: JSON.stringify({ error: 'Missing insuredId' }),
+      body: JSON.stringify({ error: "Missing insuredId" }),
     };
   }
 
   try {
-    const result = await dynamo.query({
-      TableName: process.env.APPOINTMENTS_TABLE!,
-      KeyConditionExpression: 'insuredId = :id',
-      ExpressionAttributeValues: {
-        ':id': insuredId,
-      },
-    }).promise();
+    const result = await appointmentRepository.getByInsuredId(insuredId);
 
     return {
       statusCode: 200,
-      body: JSON.stringify(result.Items),
+      body: JSON.stringify(result),
     };
   } catch (err) {
-    console.error('Error querying appointments:', err);
+    console.error("Error querying appointments:", err);
     return {
       statusCode: 500,
-      body: JSON.stringify({ error: 'Internal server error' }),
+      body: JSON.stringify({ error: "Internal server error" }),
     };
   }
 };
