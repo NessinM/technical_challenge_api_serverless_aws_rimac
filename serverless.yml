@@ -1,0 +1,247 @@
+service: medical-appointment
+
+custom:
+  dynamoDbTable: AppointmentsTable
+
+provider:
+  name: aws
+  runtime: nodejs18.x
+  region: us-east-1
+  environment:
+    APPOINTMENTS_TABLE: ${self:custom.dynamoDbTable}
+  deploymentBucket:
+    name: bucket-serverless-medical-appointment
+  iamRoleStatements:
+    - Effect: Allow
+      Action:
+        - dynamodb:PutItem
+        - dynamodb:Query
+        - dynamodb:GetItem
+        - dynamodb:UpdateItem
+        - dynamodb:Scan
+      Resource: arn:aws:dynamodb:${aws:region}:${aws:accountId}:table/${self:custom.dynamoDbTable}
+    - Effect: Allow
+      Action:
+        - sns:Publish
+        - sns:Subscribe
+      Resource: arn:aws:sns:${aws:region}:${aws:accountId}:AppointmentTopic
+    - Effect: Allow
+      Action:
+        - sqs:SendMessage
+        - sqs:ReceiveMessage
+        - sqs:DeleteMessage
+        - sqs:GetQueueAttributes
+      Resource:
+        - arn:aws:sqs:${aws:region}:${aws:accountId}:SqsPeQueue
+        - arn:aws:sqs:${aws:region}:${aws:accountId}:SqsClQueue
+        - arn:aws:sqs:${aws:region}:${aws:accountId}:AppointmentStatusUpdateQueue
+    - Effect: Allow
+      Action:
+        - events:PutEvents
+        - events:DescribeRule
+        - events:ListTargetsByRule
+      Resource: arn:aws:events:${aws:region}:${aws:accountId}:rule/AppointmentCompletedRule
+    - Effect: Allow
+      Action:
+        - lambda:InvokeFunction
+      Resource: arn:aws:lambda:${aws:region}:${aws:accountId}:function:*
+    - Effect: Allow
+      Action:
+        - logs:CreateLogGroup
+        - logs:CreateLogStream
+        - logs:PutLogEvents
+      Resource: arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/*
+
+functions:
+  createAppointment:
+    handler: src/interfaces/controllers/appointmentController.createAppointmentHandler
+    events:
+      - http:
+          path: appointments
+          method: post
+          cors: true
+    environment:
+      APPOINTMENT_TOPIC_ARN:
+        Fn::GetAtt:
+          - AppointmentTopic
+          - TopicArn
+      DYNAMODB_TABLE: ${self:custom.dynamoDbTable}
+
+  getAppointments:
+    handler: src/infrastructure/aws/appointments/getAppointmentsHandler.getAppointments
+    events:
+      - http:
+          path: appointments/{insuredId}
+          method: get
+          cors: true
+          request:
+            parameters:
+              paths:
+                insuredId: true
+
+  appointment_pe:
+    handler: src/infrastructure/aws/appointments/appointmentPeHandler.processAppointmentPe
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - SqsPeQueue
+              - Arn
+          batchSize: 5
+    environment:
+      APPOINTMENT_EVENT_TOPIC_ARN:
+        Fn::GetAtt:
+          - AppointmentTopic
+          - TopicArn
+    dependsOn:
+      - SqsPeQueue
+      - AppointmentTopic
+
+  appointment_cl:
+    handler: src/infrastructure/aws/appointments/appointmentClHandler.processAppointmentCl
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - SqsClQueue
+              - Arn
+          batchSize: 5
+    environment:
+      APPOINTMENT_EVENT_TOPIC_ARN:
+        Fn::GetAtt:
+          - AppointmentTopic
+          - TopicArn
+    dependsOn:
+      - SqsClQueue
+      - AppointmentTopic
+
+  statusUpdater:
+    handler: src/infrastructure/aws/status/statusUpdaterHandler.updateStatus
+    events:
+      - sqs:
+          arn:
+            Fn::GetAtt:
+              - AppointmentStatusUpdateQueue
+              - Arn
+          batchSize: 5
+
+resources:
+  Resources:
+    SqsPeQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_PE
+
+    SqsClQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: SQS_CL
+
+    AppointmentStatusUpdateQueue:
+      Type: AWS::SQS::Queue
+      Properties:
+        QueueName: AppointmentStatusUpdateQueue
+
+    AppointmentTopic:
+      Type: AWS::SNS::Topic
+      Properties:
+        TopicName: AppointmentTopic
+
+    PermissionToSendToSQS:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref AppointmentStatusUpdateQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                Service: events.amazonaws.com
+              Action: "sqs:SendMessage"
+              Resource: !GetAtt AppointmentStatusUpdateQueue.Arn
+
+    SqsPeQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref SqsPeQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: "*"
+              Action:
+                - "sqs:SendMessage"
+                - "sqs:ReceiveMessage"
+                - "sqs:DeleteMessage"
+                - "sqs:GetQueueAttributes"
+              Resource: !GetAtt SqsPeQueue.Arn
+
+    SqsClQueuePolicy:
+      Type: AWS::SQS::QueuePolicy
+      Properties:
+        Queues:
+          - !Ref SqsClQueue
+        PolicyDocument:
+          Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Principal:
+                AWS: "*"
+              Action:
+                - "sqs:SendMessage"
+                - "sqs:ReceiveMessage"
+                - "sqs:DeleteMessage"
+                - "sqs:GetQueueAttributes"
+              Resource: !GetAtt SqsClQueue.Arn
+
+    AppointmentCompletedRule:
+      Type: AWS::Events::Rule
+      Properties:
+        Name: AppointmentCompletedRule
+        EventPattern:
+          source:
+            - "appointment.service"
+          detail-type:
+            - "appointment.completed"
+        Targets:
+          - Arn: !GetAtt AppointmentStatusUpdateQueue.Arn
+            Id: "SendToStatusQueue"
+
+    AppointmentTopicSubscriptionPE:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: sqs
+        Endpoint: !GetAtt SqsPeQueue.Arn
+        TopicArn: !Ref AppointmentTopic
+        FilterPolicy:
+          countryISO: ["PE"]
+
+    AppointmentTopicSubscriptionCL:
+      Type: AWS::SNS::Subscription
+      Properties:
+        Protocol: sqs
+        Endpoint: !GetAtt SqsClQueue.Arn
+        TopicArn: !Ref AppointmentTopic
+        FilterPolicy:
+          countryISO: ["CL"]
+
+    AppointmentsTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: ${self:custom.dynamoDbTable}
+        AttributeDefinitions:
+          - AttributeName: insuredId
+            AttributeType: S
+          - AttributeName: scheduleId
+            AttributeType: N
+        KeySchema:
+          - AttributeName: insuredId
+            KeyType: HASH
+          - AttributeName: scheduleId
+            KeyType: RANGE
+        ProvisionedThroughput:
+          ReadCapacityUnits: 5
+          WriteCapacityUnits: 5
