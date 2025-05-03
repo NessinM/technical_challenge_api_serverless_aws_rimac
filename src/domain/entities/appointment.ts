@@ -1,4 +1,3 @@
-// src/domain/entities/appointment.ts
 import { InsuredId } from '../value-objects/insuredId';
 import { CountryISO } from '../value-objects/countryISO';
 import { ScheduleId } from '../value-objects/scheduleId';

@@ -52,6 +52,9 @@ provider:
         - logs:PutLogEvents
       Resource: arn:aws:logs:${aws:region}:${aws:accountId}:log-group:/aws/lambda/*
 
+plugins:
+  - serverless-dotenv-plugin
+
 functions:
   createAppointment:
     handler: src/interfaces/controllers/appointmentController.createHandler
@@ -95,6 +98,10 @@ functions:
         Fn::GetAtt:
           - AppointmentTopic
           - TopicArn
+      RDS_HOST_PE: ${env:RDS_HOST_PE}
+      RDS_USER_PE: ${env:RDS_USER_PE}
+      RDS_PASSWORD_PE: ${env:RDS_PASSWORD_PE}
+      RDS_DATABASE_PE: ${env:RDS_DATABASE_PE}
     dependsOn:
       - SqsPeQueue
       - AppointmentTopic
@@ -113,6 +120,10 @@ functions:
         Fn::GetAtt:
           - AppointmentTopic
           - TopicArn
+      RDS_HOST_CL: ${env:RDS_HOST_CL}
+      RDS_USER_CL: ${env:RDS_USER_CL}
+      RDS_PASSWORD_CL: ${env:RDS_PASSWORD_CL}
+      RDS_DATABASE_CL: ${env:RDS_DATABASE_CL}
     dependsOn:
       - SqsClQueue
       - AppointmentTopic
@@ -266,15 +277,11 @@ resources:
       Properties:
         TableName: ${self:custom.dynamoDbTable}
         AttributeDefinitions:
-          - AttributeName: insuredId
-            AttributeType: S
           - AttributeName: scheduleId
             AttributeType: N
         KeySchema:
-          - AttributeName: insuredId
-            KeyType: HASH
           - AttributeName: scheduleId
-            KeyType: RANGE
+            KeyType: HASH
         BillingMode: PAY_PER_REQUEST
 
     # Logs (opcional, si quieres controlar retención)

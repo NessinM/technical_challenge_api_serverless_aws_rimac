@@ -8,9 +8,10 @@ export const updateStatus = async (event: SQSEvent) => {
     const body = JSON.parse(record.body);
 
     const detail = body.detail;
-    const { scheduleId, insuredId } = detail;
+    console.log('detail', detail)
+    const { scheduleId } = detail;
 
-    await appointmentRepository.updateStatus(insuredId, scheduleId);
+    await appointmentRepository.updateStatus(scheduleId);
   }
 
   return {

@@ -1,34 +1,56 @@
 import { SQSEvent } from "aws-lambda";
-import { PrismaClient } from "@prisma/client";
+import mysql from "mysql2/promise";
 import { SNS } from "aws-sdk";
 
-const prisma = new PrismaClient();
+// SNS para publicar eventos
 const sns = new SNS();
 
-export const processAppointmentPe = async (event: SQSEvent) => {
+export const processAppointmentCl = async (event: SQSEvent) => {
   for (const record of event.Records) {
     const message = JSON.parse(record.body);
 
-    // Insertar en RDS (MySQL)
-    await prisma.appointment.create({
-      data: {
-        scheduleId: message.scheduleId,
-        insuredId: message.insuredId,
-        countryISO: message.countryISO,
-        status: message.status,
-        timestamp: new Date(),
-      },
-    });
+    // Obtener configuración de la base de datos según el país
+    const dbConfig = {
+      host: process.env.RDS_HOST_PE,
+      user: process.env.RDS_USER_PE,
+      password: process.env.RDS_PASSWORD_PE,
+      database: process.env.RDS_DATABASE_PE,
+    };
+    console.log('dbConfig PE', dbConfig)
 
-    // Publicar evento en EventBridge
-    await sns
-      .publish({
-        Message: JSON.stringify({
-          scheduleId: message.scheduleId,
-          status: "completed",
-        }),
-        TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN, // ARN de EventBridge
-      })
-      .promise();
+    // Conectar a la base de datos específica
+    const connection = await mysql.createConnection(dbConfig);
+
+    try {
+      // Insertar en MySQL (Aurora o RDS)
+      const insertQuery = `
+        INSERT INTO appointment (scheduleId, insuredId, countryISO, status, timestamp)
+        VALUES (?, ?, ?, ?, ?)
+      `;
+      await connection.execute(insertQuery, [
+        message.scheduleId,
+        message.insuredId,
+        message.countryISO,
+        message.status,
+        new Date(),
+      ]);
+
+      // Publicar evento en EventBridge (vía SNS)
+      await sns
+        .publish({
+          Message: JSON.stringify({
+            scheduleId: message.scheduleId,
+            status: "completed",
+          }),
+          TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN!,
+        })
+        .promise();
+
+      console.log(`✔️ Guardado y publicado: ${message.scheduleId}`);
+    } catch (err) {
+      console.error(`❌ Error al procesar ${message.scheduleId}:`, err);
+    } finally {
+      await connection.end();
+    }
   }
 };

@@ -23,21 +23,20 @@ export class AppointmentRepository {
   async getByInsuredId(insuredId: string): Promise<Appointment[]> {
     const params = {
       TableName: TABLE_NAME,
-      KeyConditionExpression: "insuredId = :insuredId",
+      FilterExpression: "insuredId = :insuredId",
       ExpressionAttributeValues: {
         ":insuredId": insuredId,
       },
     };
 
-    const result = await dynamoDb.query(params).promise();
+    const result = await dynamoDb.scan(params).promise();
     return result.Items as Appointment[];
   }
 
-  async updateStatus(insuredId: string, scheduleId: string) {
+  async updateStatus(scheduleId: string) {
     const params = {
       TableName: process.env.APPOINTMENTS_TABLE!,
       Key: {
-        insuredId,
         scheduleId,
       },
       UpdateExpression: "SET #status = :completed",
