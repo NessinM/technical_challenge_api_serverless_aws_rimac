@@ -33,9 +33,9 @@ export class AppointmentRepository {
     return result.Items as Appointment[];
   }
 
-  async updateStatus(scheduleId: string) {
+  async updateStatus(scheduleId: number) {
     const params = {
-      TableName: process.env.APPOINTMENTS_TABLE!,
+      TableName: TABLE_NAME,
       Key: {
         scheduleId,
       },
@@ -46,10 +46,35 @@ export class AppointmentRepository {
       ExpressionAttributeValues: {
         ":completed": "completed",
       },
+      ReturnValues: "UPDATED_NEW",
     };
 
-    const result = await dynamoDb.update(params).promise();
+    try {
+      const result = await dynamoDb.update(params).promise();
+      console.log(`Successfully updated status for scheduleId: ${scheduleId}`);
 
-    return result.$response.data;
+      // Si la actualización fue exitosa, puedes devolver un mensaje con el resultado
+      return {
+        statusCode: 200,
+        body: JSON.stringify({
+          message: `Status updated to completed for scheduleId: ${scheduleId}`,
+          updatedAttributes: result.Attributes, // Se pueden retornar los atributos actualizados
+        }),
+      };
+    } catch (error) {
+      console.error(
+        `Error updating status for scheduleId: ${scheduleId}`,
+        error
+      );
+
+      // En caso de error, retornar un mensaje adecuado con un statusCode 500
+      return {
+        statusCode: 500,
+        body: JSON.stringify({
+          message: `Failed to update status for scheduleId: ${scheduleId}`,
+          error: error.message, // Incluyendo detalles del error
+        }),
+      };
+    }
   }
 }

@@ -5,9 +5,24 @@ import { SNS } from "aws-sdk";
 // SNS para publicar eventos
 const sns = new SNS();
 
-export const processAppointmentCl = async (event: SQSEvent) => {
+export const processAppointmentPe = async (event: SQSEvent) => {
   for (const record of event.Records) {
-    const message = JSON.parse(record.body);
+    const payload = JSON.parse(record.body);
+    const message = JSON.parse(payload.Message);
+
+    const scheduleId = message.scheduleId || null;
+    const insuredId = message.insuredId || null;
+    const countryISO = message.countryISO || null;
+
+    // Validar si hay valores faltantes
+    if (!scheduleId || !insuredId || !countryISO) {
+      console.error("❌ Missing required data:", {
+        scheduleId,
+        insuredId,
+        countryISO,
+      });
+      continue; // Saltar al siguiente registro si falta algún dato
+    }
 
     // Obtener configuración de la base de datos según el país
     const dbConfig = {
@@ -16,7 +31,6 @@ export const processAppointmentCl = async (event: SQSEvent) => {
       password: process.env.RDS_PASSWORD_PE,
       database: process.env.RDS_DATABASE_PE,
     };
-    console.log('dbConfig PE', dbConfig)
 
     // Conectar a la base de datos específica
     const connection = await mysql.createConnection(dbConfig);
@@ -24,31 +38,39 @@ export const processAppointmentCl = async (event: SQSEvent) => {
     try {
       // Insertar en MySQL (Aurora o RDS)
       const insertQuery = `
-        INSERT INTO appointment (scheduleId, insuredId, countryISO, status, timestamp)
-        VALUES (?, ?, ?, ?, ?)
+        INSERT INTO appointment (scheduleId, insuredId, countryISO, timestamp)
+        VALUES (?, ?, ?, ?)
       `;
       await connection.execute(insertQuery, [
-        message.scheduleId,
-        message.insuredId,
-        message.countryISO,
-        message.status,
+        scheduleId,
+        insuredId,
+        countryISO,
         new Date(),
       ]);
 
       // Publicar evento en EventBridge (vía SNS)
-      await sns
-        .publish({
-          Message: JSON.stringify({
-            scheduleId: message.scheduleId,
-            status: "completed",
-          }),
-          TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN!,
-        })
-        .promise();
+      try {
+        await sns
+          .publish({
+            Message: JSON.stringify({
+              scheduleId: scheduleId,
+              status: "completed",
+            }),
+            TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN!,
+          })
+          .promise();
 
-      console.log(`✔️ Guardado y publicado: ${message.scheduleId}`);
+        console.log(`✔️ Evento publicado: ${scheduleId}`);
+      } catch (snsError) {
+        console.error(
+          `❌ Error al publicar evento en SNS para ${scheduleId}:`,
+          snsError
+        );
+      }
+
+      console.log(`✔️ Guardado y publicado: ${scheduleId}`);
     } catch (err) {
-      console.error(`❌ Error al procesar ${message.scheduleId}:`, err);
+      console.error(`❌ Error al procesar ${scheduleId}:`, err);
     } finally {
       await connection.end();
     }
