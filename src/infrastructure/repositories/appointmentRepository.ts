@@ -34,6 +34,7 @@ export class AppointmentRepository {
   }
 
   async updateStatus(scheduleId: number) {
+    console.log("Updating status for scheduleId:>>>>>>>>>>>", scheduleId);
     const params = {
       TableName: TABLE_NAME,
       Key: {

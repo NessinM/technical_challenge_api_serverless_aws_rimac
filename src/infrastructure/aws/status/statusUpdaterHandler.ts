@@ -4,6 +4,7 @@ import { AppointmentRepository } from "../../repositories/appointmentRepository"
 const appointmentRepository = new AppointmentRepository();
 
 export const updateStatus = async (event: SQSEvent) => {
+  console.log('event -> updateStatus >>>>>>>>>>>>>>>>>>: ')
   for (const record of event.Records) {
     const body = JSON.parse(record.body);
     console.log('body -> updateStatus : ', body)

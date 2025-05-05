@@ -25,40 +25,55 @@ export const processAppointmentPe = async (event: SQSEvent) => {
     }
 
     // Obtener configuración de la base de datos según el país
-    const dbConfig = {
-      host: process.env.RDS_HOST_PE,
-      user: process.env.RDS_USER_PE,
-      password: process.env.RDS_PASSWORD_PE,
-      database: process.env.RDS_DATABASE_PE,
-    };
+    // const dbConfig = {
+    //   host: process.env.RDS_HOST_PE,
+    //   user: process.env.RDS_USER_PE,
+    //   password: process.env.RDS_PASSWORD_PE,
+    //   database: process.env.RDS_DATABASE_PE,
+    // };
 
     // Conectar a la base de datos específica
-    const connection = await mysql.createConnection(dbConfig);
+    // const connection = await mysql.createConnection(dbConfig);
 
     try {
       // Insertar en MySQL (Aurora o RDS)
-      const insertQuery = `
-        INSERT INTO appointment (scheduleId, insuredId, countryISO, timestamp)
-        VALUES (?, ?, ?, ?)
-      `;
-      await connection.execute(insertQuery, [
+      // const insertQuery = `
+      //   INSERT INTO appointment (scheduleId, insuredId, countryISO, timestamp)
+      //   VALUES (?, ?, ?, ?)
+      // `;
+      // await connection.execute(insertQuery, [
+      //   scheduleId,
+      //   insuredId,
+      //   countryISO,
+      //   new Date(),
+      // ]);
+
+      console.log('INSERT PE IN MYSQL', [
         scheduleId,
         insuredId,
         countryISO,
         new Date(),
-      ]);
+      ])
+      console.log('process.env.APPOINTMENT_EVENT_TOPIC_ARN', process.env.APPOINTMENT_EVENT_TOPIC_ARN)
 
       // Publicar evento en EventBridge (vía SNS)
       try {
         await sns
-          .publish({
-            Message: JSON.stringify({
-              scheduleId: scheduleId,
-              status: "completed",
-            }),
-            TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN!,
-          })
-          .promise();
+        .publish({
+          Message: JSON.stringify({
+            scheduleId: scheduleId,
+            status: "completed",
+          }),
+          TopicArn: process.env.APPOINTMENT_EVENT_TOPIC_ARN!,
+          MessageAttributes: {
+            countryISO: {
+              DataType: "String",
+              StringValue: "PE", // o "CL", según el país correspondiente
+            },
+          },
+        })
+        .promise();
+
 
         console.log(`✔️ Evento publicado: ${scheduleId}`);
       } catch (snsError) {
@@ -72,7 +87,7 @@ export const processAppointmentPe = async (event: SQSEvent) => {
     } catch (err) {
       console.error(`❌ Error al procesar ${scheduleId}:`, err);
     } finally {
-      await connection.end();
+      // await connection.end();
     }
   }
 };

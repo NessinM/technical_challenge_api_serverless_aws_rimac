@@ -24,7 +24,7 @@ provider:
       Action:
         - sns:Publish
         - sns:Subscribe
-      Resource: arn:aws:sns:${aws:region}:${aws:accountId}:AppointmentTopic
+      Resource: arn:aws:sns:${aws:region}:${aws:accountId}:AppointmentTopic-${sls:stage}
     - Effect: Allow
       Action:
         - sqs:SendMessage
@@ -142,54 +142,29 @@ functions:
 
 resources:
   Resources:
-    # Dead Letter Queues
-    SqsPeDLQ:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: SQS_PE_DLQ
-
-    SqsClDLQ:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: SQS_CL_DLQ
-
-    AppointmentStatusDLQ:
-      Type: AWS::SQS::Queue
-      Properties:
-        QueueName: AppointmentStatusUpdate_DLQ
-
     # Main Queues
     SqsPeQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_PE
-        RedrivePolicy:
-          deadLetterTargetArn: !GetAtt SqsPeDLQ.Arn
-          maxReceiveCount: 5
 
     SqsClQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: SQS_CL
-        RedrivePolicy:
-          deadLetterTargetArn: !GetAtt SqsClDLQ.Arn
-          maxReceiveCount: 5
 
     AppointmentStatusUpdateQueue:
       Type: AWS::SQS::Queue
       Properties:
         QueueName: AppointmentStatusUpdateQueue
-        RedrivePolicy:
-          deadLetterTargetArn: !GetAtt AppointmentStatusDLQ.Arn
-          maxReceiveCount: 5
 
     # SNS Topic
     AppointmentTopic:
       Type: AWS::SNS::Topic
       Properties:
-        TopicName: AppointmentTopic
+        TopicName: AppointmentTopic-${sls:stage}
 
-    # SNS Subscriptions
+    # SNS Subscriptions con filtro único
     AppointmentTopicSubscriptionPE:
       Type: AWS::SNS::Subscription
       Properties:
@@ -209,20 +184,6 @@ resources:
           countryISO: ["CL"]
 
     # Queue Policies
-    PermissionToSendToSQS:
-      Type: AWS::SQS::QueuePolicy
-      Properties:
-        Queues:
-          - !Ref AppointmentStatusUpdateQueue
-        PolicyDocument:
-          Version: "2012-10-17"
-          Statement:
-            - Effect: Allow
-              Principal:
-                Service: events.amazonaws.com
-              Action: "sqs:SendMessage"
-              Resource: !GetAtt AppointmentStatusUpdateQueue.Arn
-
     SqsPeQueuePolicy:
       Type: AWS::SQS::QueuePolicy
       Properties:
@@ -256,21 +217,12 @@ resources:
                 - sqs:DeleteMessage
                 - sqs:GetQueueAttributes
               Resource: !GetAtt SqsClQueue.Arn
-
-    # EventBridge Rule
-    AppointmentCompletedRule:
-      Type: AWS::Events::Rule
+    AppointmentTopicSubscriptionStatusUpdateQueue:
+      Type: AWS::SNS::Subscription
       Properties:
-        Name: AppointmentCompletedRule
-        EventPattern:
-          source:
-            - "appointment.service"
-          detail-type:
-            - "appointment.completed"
-        Targets:
-          - Arn: !GetAtt AppointmentStatusUpdateQueue.Arn
-            Id: "SendToStatusQueue"
-
+        Protocol: sqs
+        Endpoint: !GetAtt AppointmentStatusUpdateQueue.Arn
+        TopicArn: !Ref AppointmentTopic
     # DynamoDB Table
     AppointmentsTable:
       Type: AWS::DynamoDB::Table
@@ -284,7 +236,7 @@ resources:
             KeyType: HASH
         BillingMode: PAY_PER_REQUEST
 
-    # Logs (opcional, si quieres controlar retención)
+    # Logs (opcional)
     LogGroupCreateAppointment:
       Type: AWS::Logs::LogGroup
       Properties:
